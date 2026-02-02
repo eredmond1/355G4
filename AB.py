@@ -123,6 +123,16 @@ class State:
 
         return successors
     
+    
+    def check_transition(self, prev_state):
+        """Return 'VALID' if this state is a valid move from prev_state, else 'INVALID'."""
+        possible = [succ.board_state for succ in prev_state.getSuccessors()]
+        if self.board_state in possible:
+            return "VALID"
+        else:
+            return "INVALID"
+        
+        
     # gets path of states from initial to self
     def getPath(self):
         path=[]
@@ -222,9 +232,9 @@ if __name__ == "__main__":
     
     if solution:
         print("Solution is")
-        path = solution.getPath() # Backtracking to root through parents
-        for node in path:
-            # Print state as numbers being separated by space
-            print(*(node.board_state))
+        path = solution.getPath()
+        for i, node in enumerate(path):
+            print(*(node.board_state), end=" ")
+            print("START" if i == 0 else node.check_transition(path[i-1]))
     else:
         print("No solution")
