@@ -1,6 +1,7 @@
 from sys import argv
 import copy
 import heapq
+import time
 
 #TODO: the tree still needs to be implemented, but this can be done with one of two  
 
@@ -10,6 +11,8 @@ import heapq
     
 
 class State:
+    HEURISTIC_WEIGHT = 3 #to put more weight on the huristic 
+
     def __init__(self, board_state, shift_values, size):
         #inited both and can be shuffeled 
         self.board_state = list(map(int, board_state))
@@ -19,6 +22,17 @@ class State:
         self.inversions=self.getInversions()
         self.parent=None
 
+    # lightweight copy instead of deepcopy
+    def _copy(self):
+        new = State.__new__(State)
+        new.board_state = self.board_state[:]  # only this needs copying (gets mutated)
+        new.shift_values = self.shift_values    # shared ref, never mutated
+        new.cost = self.cost
+        new.size = self.size
+        new.inversions = self.inversions
+        new.parent = self.parent
+        return new
+
     # needed for checking membership in frontier
     def __eq__(self, other):
         if other is None or not isinstance(other, State):
@@ -27,7 +41,7 @@ class State:
 
     # needed to pass object in heapq
     def __lt__(self, other):
-        return self.cost+self.inversions < other.cost+other.inversions
+        return self.cost + self.inversions * State.HEURISTIC_WEIGHT < other.cost + other.inversions * State.HEURISTIC_WEIGHT
         
     #gets the index of null
     def getNullIndex(self):
@@ -55,25 +69,25 @@ class State:
     #moved the empty space to the left 
     def shiftLeft(self):
         null= self.getNullIndex()
-        self.board_state[null], self.board_state[(null-1)%10] = self.board_state[(null-1)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null-1)%self.size] = self.board_state[(null-1)%self.size], self.board_state[null]
      
     #moves the empty space to the right and time to to the left   
     def shiftRight(self):
         null= self.getNullIndex()
-        self.board_state[null], self.board_state[(null+1)%10] = self.board_state[(null+1)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null+1)%self.size] = self.board_state[(null+1)%self.size], self.board_state[null]
         
     #swaps the space and tile to the right by the shift vaule of the space  
     def rightShiftByValue(self):
         null = self.getNullIndex()
         shiftValue = self.shift_values[null]
-        self.board_state[null], self.board_state[(null+shiftValue)%10] = self.board_state[(null+shiftValue)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null+shiftValue)%self.size] = self.board_state[(null+shiftValue)%self.size], self.board_state[null]
         
         
      ##swaps the space and tile to the left by the shift vaule of the space
     def leftShiftByValue(self):
         null = self.getNullIndex()
         shiftValue= self.shift_values[null]
-        self.board_state[null], self.board_state[(null-shiftValue)%10] = self.board_state[(null-shiftValue)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null-shiftValue)%self.size] = self.board_state[(null-shiftValue)%self.size], self.board_state[null]
     
     #checks the game state to see if it is a solution
     #return bool 
@@ -81,6 +95,9 @@ class State:
         null = self.getNullIndex()
         temp = self.normalizeBoard()
         goal = [0,1,1,1,2,2,2,3,3,3]
+        if (self.size == 17):
+            goal = [0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5]
+            return temp == goal
         return temp == goal
 
     # gets children of given state
@@ -88,7 +105,7 @@ class State:
         successors=[]
 
         # create child 1
-        child = copy.deepcopy(self)
+        child = self._copy()
         child.parent=self
         child.cost += 1
         child.shiftLeft()
@@ -96,7 +113,7 @@ class State:
         successors.append(child)
 
         # create child 2
-        child = copy.deepcopy(self)
+        child = self._copy()
         child.parent=self
         child.cost += 1
         child.shiftRight()
@@ -106,7 +123,7 @@ class State:
         # check if shift value is 1
         if (self.getShiftValue() != 1):
             # create child 3
-            child = copy.deepcopy(self)
+            child = self._copy()
             child.parent=self
             child.cost += 1
             child.leftShiftByValue()
@@ -114,7 +131,7 @@ class State:
             successors.append(child)
 
             # create child 4
-            child = copy.deepcopy(self)
+            child = self._copy()
             child.parent=self
             child.cost += 1
             child.rightShiftByValue()
@@ -150,17 +167,36 @@ class State:
         frontier=[]
         closed=set()
 
+        timeout_seconds = 20 * 60
+        log_interval_seconds = 60
+        start_time = time.monotonic()
+        next_log_time = start_time + log_interval_seconds
+        nodes_expanded = 0
+
         # push initial state to frontier
         # heapq selects for smallest first is smallest f, second is smallest h
-        heapq.heappush(frontier, (self, self.inversions))
+        heapq.heappush(frontier, (self, self.inversions * State.HEURISTIC_WEIGHT))
 
         # start search
         while frontier:
+            now = time.monotonic()
+            if now - start_time >= timeout_seconds:
+                return None, "timeout", now - start_time
+
             current, h = heapq.heappop(frontier)
+            nodes_expanded += 1
+
+            if now >= next_log_time:
+                print(
+                    "Elapsed: {:.1f}s | Expanded: {} | Frontier: {} | State: {}".format(
+                        now - start_time, nodes_expanded, len(frontier), current.board_state
+                    )
+                )
+                next_log_time = now + log_interval_seconds
 
             # check if current is solution
             if current.checker():
-                return current
+                return current, "solved", time.monotonic() - start_time
 
             # add current to closed
             closed.add(tuple(current.board_state))
@@ -169,10 +205,10 @@ class State:
             for child in current.getSuccessors():
                 # Faster version:
                 if tuple(child.board_state) not in closed:
-                    heapq.heappush(frontier, (child, child.inversions))
+                    heapq.heappush(frontier, (child, child.inversions * State.HEURISTIC_WEIGHT))
         
         # no solution
-        return None
+        return None, "no-solution", time.monotonic() - start_time
 
     def format_output(state_path):
         print("Solution is")  # Required header [cite: 52]
@@ -204,6 +240,8 @@ class State:
 
 if __name__ == "__main__":
     import sys
+    import time
+    from datetime import datetime
     # Get N from command line
     if len(sys.argv) < 2:
         print("Usage: python AB.py <number_of_disks>")
@@ -228,13 +266,23 @@ if __name__ == "__main__":
     start_node = State(board_state, shift_values, n_disks)
     
     # Solve and Print
-    solution = start_node.solve() # A* solver function
+    wall_start = datetime.now()
+    solution, reason, elapsed = start_node.solve() # A* solver function
+    wall_end = datetime.now()
     
     if solution:
         print("Solution is")
+        print("Wall clock start: {}".format(wall_start.isoformat(sep=" ", timespec="seconds")))
+        print("Wall clock end: {}".format(wall_end.isoformat(sep=" ", timespec="seconds")))
+        print("Elapsed seconds: {:.1f}".format(elapsed))
         path = solution.getPath()
         for i, node in enumerate(path):
             print(*(node.board_state), end=" ")
             print("START" if i == 0 else node.check_transition(path[i-1]))
     else:
-        print("No solution")
+        if reason == "timeout":
+            print("Wall clock start: {}".format(wall_start.isoformat(sep=" ", timespec="seconds")))
+            print("Wall clock end: {}".format(wall_end.isoformat(sep=" ", timespec="seconds")))
+            print("Timeout after {:.1f} seconds".format(elapsed))
+        else:
+            print("No solution")
