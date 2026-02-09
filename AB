@@ -1,10 +1,75 @@
+#!/usr/bin/python3
+
 import sys
+import heapq
 
 #TODO: the tree still needs to be implemented, but this can be done with one of two  
 
 #ACTIONS: get preformed with a single function call to parameters
 #functions dont return as Python passes value by obj ref 
 #this handes the mod math so everything will go in a loop
+
+class SMA:
+    def __init__(self, max_nodes=200000):
+        self.max_nodes = max_nodes
+        self.nodes = {}
+        self.queue = []
+
+    def solve(self, start_node):
+        start_key = tuple(start_node.normalizeBoard())
+
+        #initialize start node then create queue
+        self.nodes[start_key] = start_node
+        heapq.heappush(self.queue, (start_node.f, start_node.heuristic, start_key))
+
+        while self.queue:
+            f, h, key = heapq.heappop(self.queue)
+            
+            # get node from key
+            current = self.nodes.get(key)
+
+            # with sma we end up removing keys so its possible current becomes none
+            if current == None:
+                continue
+
+            # return current if it is solution
+            if current.checker():
+                return current
+
+            # get successors
+            successors = current.getSuccessors()
+            for child in successors:
+                child_key = tuple(child.normalizeBoard())
+
+                # check memory
+                if len(self.nodes) >= self.max_nodes:
+                    self.prune_worst()
+
+                # add child to nodes
+                if child_key not in self.nodes:
+                    self.nodes[child_key] = child
+                    heapq.heappush(self.queue, (child.f, child.heuristic, child_key))
+        
+        return None
+
+    def prune_worst(self):
+        # if queue is empty return
+        if not self.queue:
+            return
+
+        # sort queue
+        self.queue.sort()
+
+        # remove bottom 20% of nodes
+        to_remove = self.queue[int(self.max_nodes*0.8):]
+        self.queue = self.queue[:int(self.max_nodes*0.8)]
+
+        for i, j, key in to_remove:
+            if key in self.nodes:
+                del self.nodes[key]
+
+        heapq.heapify(self.queue)
+    
     
 
 class State:
@@ -15,6 +80,7 @@ class State:
         self.cost=0
         self.size=int(size)
         self.heuristic = self.getHeuristic()
+        self.f = self.cost + self.heuristic
         self.parent=None
 
     # needed for checking membership in frontier
@@ -23,6 +89,10 @@ class State:
             return False
         return self.board_state == other.board_state
 
+    # needed to pass object in heapq
+    def __lt__(self, other):
+        return self.cost+self.heuristic < other.cost+other.heuristic
+        
     # string method
     def __str__(self):
         return " ".join(map(str, self.board_state))
@@ -35,6 +105,7 @@ class State:
         new.cost = self.cost
         new.size = self.size
         new.heuristic = self.heuristic
+        new.f = self.f
         new.parent = self.parent
         return new
 
@@ -64,7 +135,6 @@ class State:
             # continue if alread in valid indicies
             if (i >= start) and (i <= end):
                 continue
-
             start_dist = min((i - start) % self.size, (start - i) % self.size)
             end_dist = min((i - end) % self.size, (end - i) % self.size)
             best_dist = min(start_dist, end_dist)
@@ -117,6 +187,7 @@ class State:
         child.cost += 1
         child.shiftLeft()
         child.heuristic=child.getHeuristic()
+        child.f = max(self.f, child.cost+child.heuristic)
         successors.append(child)
 
         # create child 2
@@ -125,6 +196,7 @@ class State:
         child.cost += 1
         child.shiftRight()
         child.heuristic=child.getHeuristic()
+        child.f = max(self.f, child.cost+child.heuristic)
         successors.append(child)
 
         # check if shift value is 1
@@ -135,6 +207,7 @@ class State:
             child.cost += 1
             child.leftShiftByValue()
             child.heuristic=child.getHeuristic()
+            child.f = max(self.f, child.cost+child.heuristic)
             successors.append(child)
 
             # create child 4
@@ -143,10 +216,11 @@ class State:
             child.cost += 1
             child.rightShiftByValue()
             child.heuristic=child.getHeuristic()
+            child.f = max(self.f, child.cost+child.heuristic)
             successors.append(child)
         
-        # sort successors by heuristic
-        successors.sort(key=lambda s: s.heuristic)
+        # sort successors by f
+        successors.sort(key=lambda s: s.f)
         return successors
         
     # gets path of states from initial to self
@@ -158,50 +232,6 @@ class State:
             current = current.parent
         path.reverse()
         return path
-
-    # solves puzzle
-    # solves puzzle 
-    def solve_ida(self): 
-        self.cost = 0 
-        bound = self.heuristic
-        while True: 
-            visited = set() 
-            result = ida_search(self, bound, visited) 
-            if isinstance(result, State): 
-                return result # solution found 
-                
-            if result == float('inf'): 
-                return None # no solution 
-                
-            bound = result # increase threshold 
-            
-
-# IDA seach function 
-def ida_search(node, bound, visited): 
-    f = node.cost + node.heuristic
-    if f > bound: 
-        return f # return the minimum f that exceeded bound 
-    
-    if node.checker(): 
-        return node # FOUND solution 
-    
-    min_excess = float('inf') 
-    visited.add(tuple(node.normalizeBoard())) 
-        
-    for child in node.getSuccessors(): 
-        state_key = tuple(child.normalizeBoard()) 
-        if state_key in visited: 
-            continue 
-    
-        result = ida_search(child, bound, visited) 
-    
-        if isinstance(result, State): 
-            return result # solution found 
-            
-        min_excess = min(min_excess, result) 
-    visited.remove(tuple(node.normalizeBoard())) 
-        
-    return min_excess
 
 # if __name__ == "__main__":
 #     shift_values=input().split()
@@ -240,7 +270,8 @@ if __name__ == "__main__":
     start_node = State(board_state, shift_values, n_disks)
     
     # Solve and Print
-    solution = start_node.solve_ida() # IDA solver function
+    SMAsolver = SMA() # SMA* solver
+    solution = SMAsolver.solve(start_node)
     
     if solution:
         print("Solution is")
