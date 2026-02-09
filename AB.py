@@ -1,6 +1,4 @@
-from sys import argv
-import copy
-import heapq
+import sys
 
 #TODO: the tree still needs to be implemented, but this can be done with one of two  
 
@@ -16,7 +14,8 @@ class State:
         self.shift_values = list(map(int, shift_values))
         self.cost=0
         self.size=int(size)
-        self.inversions=self.getInversions()
+        self.distanceMatrix = 0
+        self.heuristic = 0
         self.parent=None
 
     # needed for checking membership in frontier
@@ -27,8 +26,24 @@ class State:
 
     # needed to pass object in heapq
     def __lt__(self, other):
-        return self.cost+self.inversions < other.cost+other.inversions
+        return self.cost+self.heuristic < other.cost+other.heuristic
         
+    # string method
+    def __str__(self):
+        return " ".join(map(str, self.board_state))
+    
+    # lightweight copy instead of deepcopy
+    def _copy(self):
+        new = State.__new__(State)
+        new.board_state = self.board_state[:]  # only this needs copying (gets mutated)
+        new.shift_values = self.shift_values    # shared ref, never mutated
+        new.cost = self.cost
+        new.size = self.size
+        new.distanceMatrix = self.distanceMatrix
+        new.heuristic = self.heuristic
+        new.parent = self.parent
+        return new
+
     #gets the index of null
     def getNullIndex(self):
         return self.board_state.index(0)
@@ -37,16 +52,57 @@ class State:
     def normalizeBoard(self):
         null = self.getNullIndex()
         return self.board_state[null:] + self.board_state[:null]
-    
-    # gets the number of inversions needed to reach goal state
-    def getInversions(self):
+
+    # calculate matrix of distances from any given point, to every other point
+    def getDistances(self):
+        # initialize matrix
+        matrix = [[float("inf") for _ in range(self.size)] for _ in range(self.size)]
+
+        # assemble matrix
+        for i in range(self.size):
+            matrix[i][i] = 0
+            queue = [(i, 0)]
+
+            while queue:
+                curr, dist = queue.pop(0)
+                k = self.shift_values[curr]
+
+                # find all possible moves
+                moves = [(curr + 1) % self.size, (curr - 1) % self.size, (curr + k) % self.size, (curr - k) % self.size]
+
+                for next_pos in moves:
+                    # if matrix position is unassigned
+                    if matrix[i][next_pos] == float("inf"):
+                        # assign value and append to queue
+                        matrix[i][next_pos] = dist + 1
+                        queue.append((next_pos, dist + 1))
+        
+        self.distanceMatrix=matrix
+        return
+
+    # gets the minimum number of moves needed for each tile to move to a desired
+    # position. returns sum
+    def getHeuristic(self):
         normalized = self.normalizeBoard()
-        inversions=0
+        n = int((self.size - 1) ** 0.5)
+        h = 0
+
+        # loop through tiles
         for i in range(1, self.size):
-            for j in range(i+1, self.size):
-                if normalized[i] > normalized[j]:
-                    inversions += 1
-        return inversions
+            tile = normalized[i]
+
+            # find valid range for tile
+            start = ((tile - 1) * n) + 1
+            end = tile * n
+
+            # find minimum from valid ranges to i
+            # must find path from desired destination to current since 0 is the only tile that moves
+            mindist = min(self.distanceMatrix[j][i] for j in range(start, end + 1))
+            h += mindist
+
+        return h
+
+
     
     #get the current shift value 
     def getShiftValue(self):
@@ -55,32 +111,31 @@ class State:
     #moved the empty space to the left 
     def shiftLeft(self):
         null= self.getNullIndex()
-        self.board_state[null], self.board_state[(null-1)%10] = self.board_state[(null-1)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null-1)%self.size] = self.board_state[(null-1)%self.size], self.board_state[null]
      
     #moves the empty space to the right and time to to the left   
     def shiftRight(self):
         null= self.getNullIndex()
-        self.board_state[null], self.board_state[(null+1)%10] = self.board_state[(null+1)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null+1)%self.size] = self.board_state[(null+1)%self.size], self.board_state[null]
         
     #swaps the space and tile to the right by the shift vaule of the space  
     def rightShiftByValue(self):
         null = self.getNullIndex()
         shiftValue = self.shift_values[null]
-        self.board_state[null], self.board_state[(null+shiftValue)%10] = self.board_state[(null+shiftValue)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null+shiftValue)%self.size] = self.board_state[(null+shiftValue)%self.size], self.board_state[null]
         
         
      ##swaps the space and tile to the left by the shift vaule of the space
     def leftShiftByValue(self):
         null = self.getNullIndex()
         shiftValue= self.shift_values[null]
-        self.board_state[null], self.board_state[(null-shiftValue)%10] = self.board_state[(null-shiftValue)%10], self.board_state[null]
+        self.board_state[null], self.board_state[(null-shiftValue)%self.size] = self.board_state[(null-shiftValue)%self.size], self.board_state[null]
     
     #checks the game state to see if it is a solution
     #return bool 
     def checker(self):
-        null = self.getNullIndex()
         temp = self.normalizeBoard()
-        goal = [0,1,1,1,2,2,2,3,3,3]
+        goal = sorted(temp)
         return temp == goal
 
     # gets children of given state
@@ -88,50 +143,42 @@ class State:
         successors=[]
 
         # create child 1
-        child = copy.deepcopy(self)
+        child = self._copy()
         child.parent=self
         child.cost += 1
         child.shiftLeft()
-        child.inversions=child.getInversions()
+        child.heuristic=child.getHeuristic()
         successors.append(child)
 
         # create child 2
-        child = copy.deepcopy(self)
+        child = self._copy()
         child.parent=self
         child.cost += 1
         child.shiftRight()
-        child.inversions=child.getInversions()
+        child.heuristic=child.getHeuristic()
         successors.append(child)
 
         # check if shift value is 1
         if (self.getShiftValue() != 1):
             # create child 3
-            child = copy.deepcopy(self)
+            child = self._copy()
             child.parent=self
             child.cost += 1
             child.leftShiftByValue()
-            child.inversions=child.getInversions()
+            child.heuristic=child.getHeuristic()
             successors.append(child)
 
             # create child 4
-            child = copy.deepcopy(self)
+            child = self._copy()
             child.parent=self
             child.cost += 1
             child.rightShiftByValue()
-            child.inversions=child.getInversions()
+            child.heuristic=child.getHeuristic()
             successors.append(child)
-
-        return successors
-    
-    
-    def check_transition(self, prev_state):
-        """Return 'VALID' if this state is a valid move from prev_state, else 'INVALID'."""
-        possible = [succ.board_state for succ in prev_state.getSuccessors()]
-        if self.board_state in possible:
-            return "VALID"
-        else:
-            return "INVALID"
         
+        # sort successors by heuristic
+        successors.sort(key=lambda s: s.heuristic)
+        return successors
         
     # gets path of states from initial to self
     def getPath(self):
@@ -144,51 +191,48 @@ class State:
         return path
 
     # solves puzzle
-    def solve(self):
-        # create frontier and closed
-        # frontier is a priority queue using a heap
-        frontier=[]
-        closed=set()
+    # solves puzzle 
+    def solve_ida(self): 
+        self.cost = 0 
+        bound = self.heuristic
+        while True: 
+            visited = set() 
+            result = ida_search(self, bound, visited) 
+            if isinstance(result, State): 
+                return result # solution found 
+                
+            if result == float('inf'): 
+                return None # no solution 
+                
+            bound = result # increase threshold 
+            
 
-        # push initial state to frontier
-        # heapq selects for smallest first is smallest f, second is smallest h
-        heapq.heappush(frontier, (self, self.inversions))
-
-        # start search
-        while frontier:
-            current, h = heapq.heappop(frontier)
-
-            # check if current is solution
-            if current.checker():
-                return current
-
-            # add current to closed
-            closed.add(tuple(current.board_state))
-
-            # add children to frontier if not in closed
-            for child in current.getSuccessors():
-                # Faster version:
-                if tuple(child.board_state) not in closed:
-                    heapq.heappush(frontier, (child, child.inversions))
-        
-        # no solution
-        return None
-
-    def format_output(state_path):
-        print("Solution is")  # Required header [cite: 52]
-        for state in state_path:
-            # Convert tuple/list of ints to space-separated strings
-            print(" ".join(map(str, state.board_state)))
+# IDA seach function 
+def ida_search(node, bound, visited): 
+    f = node.cost + node.heuristic
+    if f > bound: 
+        return f # return the minimum f that exceeded bound 
     
-    def is_goal(board, n_disks):
-        # Find the 0
-        null_idx = board.index(0)
-        # Rotate the board so 0 is at the front
-        normalized = board[null_idx:] + board[:null_idx]
-        # The '0' is at index 0. Check if the rest (1 to n_disks-1) is sorted
-        just_disks = normalized[1:]
-
-        return all(just_disks[i] <= just_disks[i+1] for i in range(len(just_disks)-1))
+    if node.checker(): 
+        return node # FOUND solution 
+    
+    min_excess = float('inf') 
+    visited.add(tuple(node.normalizeBoard())) 
+        
+    for child in node.getSuccessors(): 
+        state_key = tuple(child.normalizeBoard()) 
+        if state_key in visited: 
+            continue 
+    
+        result = ida_search(child, bound, visited) 
+    
+        if isinstance(result, State): 
+            return result # solution found 
+            
+        min_excess = min(min_excess, result) 
+    visited.remove(tuple(node.normalizeBoard())) 
+        
+    return min_excess
 
 # if __name__ == "__main__":
 #     shift_values=input().split()
@@ -203,7 +247,6 @@ class State:
 #         print("No solution")
 
 if __name__ == "__main__":
-    import sys
     # Get N from command line
     if len(sys.argv) < 2:
         print("Usage: python AB.py <number_of_disks>")
@@ -224,17 +267,18 @@ if __name__ == "__main__":
     except EOFError:
         sys.exit(0)
 
-    # Initialize A* State
+    # Initialize IDA State
     start_node = State(board_state, shift_values, n_disks)
+    start_node.getDistances()
+    start_node.getHeuristic()
     
     # Solve and Print
-    solution = start_node.solve() # A* solver function
+    solution = start_node.solve_ida() # IDA solver function
     
     if solution:
         print("Solution is")
         path = solution.getPath()
-        for i, node in enumerate(path):
-            print(*(node.board_state), end=" ")
-            print("START" if i == 0 else node.check_transition(path[i-1]))
+        for node in path:
+            print(node)
     else:
         print("No solution")
