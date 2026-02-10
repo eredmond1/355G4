@@ -234,7 +234,7 @@ if __name__ == "__main__":
         print("Solution is")
         path = solution.getPath()
         for i, node in enumerate(path):
-            print(*(node.board_state), end=" ")
-            print("START" if i == 0 else node.check_transition(path[i-1]))
+            print(*(node.board_state), end="\n")
+            #print("START" if i == 0 else node.check_transition(path[i-1]))
     else:
         print("No solution")
