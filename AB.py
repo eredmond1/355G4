@@ -47,9 +47,8 @@ class State:
         null = self.getNullIndex()
         return self.board_state[null:] + self.board_state[:null]
 
-    # heuristic finds how far a tile is from its desired indicies and adds
-    # the estimated number of moves to reach those indices.
-    # it is calculated by dividing the distance by the largest shift value
+    # heuristic finds the tile furthest from it's desired location and divides it
+    # by the maximum possible shift value, to estimate minimum moves required.
     def getHeuristic(self):
         normalized = self.normalizeBoard()
         n = int((self.size - 1) ** 0.5)
@@ -58,19 +57,22 @@ class State:
 
         for i in range(1, self.size):
             tile = normalized[i] # current tile
-            start = ((tile - 1) * n) + 1    # start of valid indicies
-            end = tile * n                  # end of valid indicies
+            start = ((tile - 1) * n) + 1 # start of valid indicies
+            end = tile * n # end of valid indicies
 
             # continue if alread in valid indicies
             if (i >= start) and (i <= end):
                 continue
 
-            start_dist = min((i - start) % self.size, (start - i) % self.size)
-            end_dist = min((i - end) % self.size, (end - i) % self.size)
-            best_dist = min(start_dist, end_dist)
-            h += -(best_dist//-max_shift) # -(a//-b) is ceiling integer division
+            distances = []
+            for j in range(start, end + 1):
+                distances.append((i - j) % self.size)
+                distances.append((j - i) % self.size)
+            
+            best_dist = min(distances)
+            h = max(h, -(best_dist//-max_shift)) # -(a//-b) is ceiling integer division
 
-        return h
+        return h 
 
     
     #get the current shift value 
