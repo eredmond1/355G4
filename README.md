@@ -15,13 +15,6 @@ The puzzle consists of:
 - A circular arrangement of tiles  
 - A single empty space (0)  
 - A set of shift values determining how far the empty space can move  
-- A goal configuration defined by sorted tile order  
-
-The solver supports:
-- Successor generation through four possible moves  
-- A heuristic function estimating the minimum number of moves  
-- Parent tracking for reconstructing the final solution path  
-
 
 
 ## Filesystem Structure
