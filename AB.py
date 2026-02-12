@@ -1,11 +1,8 @@
 import sys
 
-#TODO: the tree still needs to be implemented, but this can be done with one of two  
-
-#ACTIONS: get preformed with a single function call to parameters
-#functions dont return as Python passes value by obj ref 
-#this handes the mod math so everything will go in a loop
-    
+# CMPT355 - Group #4 
+# AB Puzzle Solver 
+# Developed by: Alex Rasmussen, Helen Ly, Ethan Redmond, & Boden Smerela   
 
 class State:
     def __init__(self, board_state, shift_values, size):
@@ -74,17 +71,16 @@ class State:
 
         return h 
 
-    
     #get the current shift value 
     def getShiftValue(self):
         return self.shift_values[self.getNullIndex()]
     
-    #moved the empty space to the left 
+    #moves the empty space to the left 
     def shiftLeft(self):
         null= self.getNullIndex()
         self.board_state[null], self.board_state[(null-1)%self.size] = self.board_state[(null-1)%self.size], self.board_state[null]
      
-    #moves the empty space to the right and time to to the left   
+    #moves the empty space to the right 
     def shiftRight(self):
         null= self.getNullIndex()
         self.board_state[null], self.board_state[(null+1)%self.size] = self.board_state[(null+1)%self.size], self.board_state[null]
@@ -95,8 +91,7 @@ class State:
         shiftValue = self.shift_values[null]
         self.board_state[null], self.board_state[(null+shiftValue)%self.size] = self.board_state[(null+shiftValue)%self.size], self.board_state[null]
         
-        
-     ##swaps the space and tile to the left by the shift vaule of the space
+     #swaps the space and tile to the left by the shift vaule of the space
     def leftShiftByValue(self):
         null = self.getNullIndex()
         shiftValue= self.shift_values[null]
@@ -161,7 +156,6 @@ class State:
         path.reverse()
         return path
 
-    # solves puzzle
     # solves puzzle 
     def solve_ida(self): 
         self.cost = 0 
@@ -205,17 +199,6 @@ def ida_search(node, bound, visited):
         
     return min_excess
 
-# if __name__ == "__main__":
-#     shift_values=input().split()
-#     board_state=input().split()
-#     start = State(board_state, shift_values, argv[1])
-#     solution = start.solve()
-#     if (solution != None):
-#         path = solution.getPath()
-#         for node in path:
-#             print(node.board_state)
-#     else:
-#         print("No solution")
 
 if __name__ == "__main__":
     # Get N from command line

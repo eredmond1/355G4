@@ -1,5 +1,3 @@
-# Makefile
-
 PYTHON = python3
 TARGET = AB
 
